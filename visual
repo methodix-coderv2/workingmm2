@@ -4323,36 +4323,12 @@ do
 		return tbl.gen == _G.__OnyxGen
 	end
 
-	tbl.WH_URL = ""
-	tbl.whOn = false
-
-	tbl.whUrlNow = function()
-		return (tostring(tbl.WH_URL or ""):gsub("^%s+", ""):gsub("%s+$", ""))
-	end
-
-	tbl.WH_HOSTS = { "discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com" }
-
+	-- Discord webhook logger removed. Sending is disabled.
 	tbl.whReady = function()
-		if not tbl.current() then
-			return false
-		end
-
-		if not tbl.whOn then
-			return false
-		end
-
-		if tbl.whBreak then
-			return false
-		end
-		local v7 = tbl.whUrlNow()
-
-		for _, whHost in ipairs(tbl.WH_HOSTS) do
-			if v7:find("^https://" .. whHost:gsub("%.", "%%.") .. "/api/webhooks/") then
-				return true
-			end
-		end
-
 		return false
+	end
+	tbl.whPost = function()
+		return false, "logger removed"
 	end
 
 	tbl.COIN_ICON = "197012173"
@@ -4404,7 +4380,6 @@ do
 	tbl.FARM_FLAGS = {
 		{ "Toggle_Coin_Autofarm", "Coin Autofarm" },
 		{ "Slider_Farm_Speed", "Farm Speed" },
-		{ "Toggle_Discord_Sender", "Discord Sender" },
 		{ "Toggle_Farm_Perf_Master", "Performance Mode" },
 		{ "Toggle_Farm_Dead_Hop", "Hop When Server Dies" },
 		{ "Toggle_Anti_AFK", "Anti-AFK" },
@@ -4416,10 +4391,6 @@ do
 	}
 
 	tbl.flagText = function(arg, arg2)
-		if arg == "Toggle_Discord_Sender" then
-			return tbl.whOn and "on" or "off"
-		end
-
 		if arg2.__type == "Slider" then
 			return type(arg2.Value) == "table" and tostring(arg2.Value.Default) or tostring(arg2.Value)
 		end
@@ -4504,281 +4475,6 @@ do
 
 		table.sort(tbl3)
 		return tbl3
-	end
-
-	tbl.whSettings = function(arg)
-		if not tbl.whReady() then
-			return false, "not sending"
-		end
-		local flag19 = arg and #arg > 0
-		local str = "Autofarm settings changed."
-
-		if flag19 then
-			str = table.concat(arg, "\n")
-
-			if #str > 3500 then
-				str = str:sub(1, 3480) .. "\n..."
-			end
-		end
-
-		return tbl.whPost({
-			title = "Settings Changed",
-			body = str,
-			thumb = tbl.avatarUrl(),
-			fields = { { name = "Autofarm Settings", value = tbl.settingsBlob(), inline = false } },
-		})
-	end
-
-	task.spawn(function()
-		task.wait(15)
-		tbl.setSnap = tbl.setState()
-
-		while true do
-			task.wait(3)
-
-			if not tbl.current() then
-				break
-			else
-				local v7 = tbl.setState()
-
-				if v7 and tbl.setSnap then
-					if #tbl.setDiff(tbl.setSnap, v7) > 0 then
-						task.wait(3)
-						local v8 = tbl.setState() or v7
-						local v9 = tbl.setDiff(tbl.setSnap, v8)
-						tbl.setSnap = v8
-
-						if #v9 > 0 and tbl.whReady() then
-							task.spawn(function()
-								pcall(tbl.whSettings, v9)
-							end)
-						end
-					end
-				elseif v7 then
-					tbl.setSnap = v7
-				end
-			end
-		end
-	end)
-
-	tbl.whHello = function()
-		if tbl.saidHello then
-			return true, "already sent"
-		end
-		local localPlayer2 = game:GetService("Players").LocalPlayer
-		tbl.readCoins()
-		tbl.readShells()
-		local whPost = tbl.whPost
-
-		local tbl2 = {
-			title = "Onyx logger started",
-			body = "Logging as **" .. localPlayer2.DisplayName .. "** since <t:" .. tostring(os.time()) .. ":f>.",
-			thumb = tbl.avatarUrl(),
-			wait = true,
-		}
-
-		local pad3 = tbl.pad3
-		local tbl3 = {}
-		local v7 = tbl.fld("User ID", "`" .. tostring(localPlayer2.UserId) .. "`")
-		local Coins = tbl.fld("Coins", "`" .. tbl.comma(tbl.coinsTotal) .. "`")
-		local Shells = tbl.fld("Shells", "`" .. tbl.comma(tbl.shellsLeft) .. "`")
-		local fld = tbl.fld
-		local v8 = tbl.settingsBlob()
-		tbl3[1] = v7
-		tbl3[2] = Coins
-		tbl3[3] = Shells
-
-		do
-			local values = table.pack(fld("Autofarm settings", v8, false))
-			table.move(values, 1, values.n, 4, tbl3)
-		end
-
-		tbl2.fields = pad3(tbl3)
-		local v9, v10 = whPost(tbl2)
-
-		if v9 then
-			tbl.saidHello = true
-		end
-
-		return v9, v10
-	end
-
-	tbl.whQ = {}
-	tbl.whQBusy = false
-	tbl.whSentN = 0
-	tbl.whDropped = 0
-	tbl.whLastErr = nil
-	tbl.whBreak = false
-
-	tbl.whSend = function(arg)
-		local request_ = syn and syn.request or request or http_request or http and http.request
-		if not request_ then
-			return false, "no request function", nil
-		end
-
-		local ok, result = pcall(request_, {
-			Url = tbl.whUrlNow(),
-			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
-			Body = arg,
-		})
-
-		if not ok then
-			return false, "request failed", 5
-		end
-		local n4 = tonumber(type(result) == "table" and (result.StatusCode or result.Status) or nil) or 0
-		if n4 == 204 or n4 == 200 or n4 == 0 and type(result) == "table" and result.Success == true then
-			return true, tostring(n4), nil
-		end
-
-		if n4 == 429 then
-			local flag19 = type(result) == "table"
-
-			if flag19 then
-				flag19 = tostring(result.Body or "")
-			end
-
-			return false, "429", math.min(60, (tonumber((flag19 or ""):match("\"retry_after\"%s*:%s*([%d%.]+)")) or 1) + 0.25)
-		end
-
-		if n4 >= 500 then
-			return false, tostring(n4), 5
-		end
-		return false, tostring(n4), nil
-	end
-
-	tbl.whPump = function()
-		if tbl.whQBusy then
-			return
-		end
-		tbl.whQBusy = true
-
-		task.spawn(function()
-			while #tbl.whQ > 0 and tbl.current() and not tbl.whBreak do
-				local v7 = tbl.whQ[1]
-				local v8, v9, v10 = tbl.whSend(v7.body)
-
-				if v8 then
-					table.remove(tbl.whQ, 1)
-					tbl.whSentN = tbl.whSentN + 1
-					tbl.whLastErr = nil
-					v7.ok = true
-					v7.code = v9
-					v7.done = true
-					task.wait(0.35)
-				elseif v10 then
-					task.wait(v10)
-				else
-					table.remove(tbl.whQ, 1)
-					tbl.whDropped = tbl.whDropped + 1
-					tbl.whLastErr = v9
-					v7.ok = false
-					v7.code = v9
-					v7.done = true
-
-					if v9 == "401" or v9 == "403" or v9 == "404" then
-						tbl.whBreak = true
-
-						v:Notify({
-							Title = "Webhook Rejected",
-							Content = "Discord answered " .. v9 .. ". The webhook was deleted or revoked, so sending has stopped. Paste a new one.",
-							Duration = 10,
-							Icon = "x",
-						})
-					end
-				end
-			end
-
-			if tbl.whBreak then
-				for _, v7 in ipairs(tbl.whQ) do
-					v7.done = true
-					v7.ok = false
-					v7.code = "stopped"
-				end
-
-				tbl.whDropped = tbl.whDropped + #tbl.whQ
-				tbl.whQ = {}
-			end
-
-			tbl.whQBusy = false
-		end)
-	end
-
-	tbl.whPost = function(arg)
-		if not tbl.whReady() then
-			return false, "no webhook set"
-		end
-		local localPlayer2 = game:GetService("Players").LocalPlayer
-
-		local tbl2 = {
-			title = arg.title,
-			description = arg.body,
-			color = tbl.CLR_LINE,
-			timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-			author = {
-				name = localPlayer2.Name .. "  (" .. localPlayer2.DisplayName .. ")",
-				url = "https://www.roblox.com/users/" .. tostring(localPlayer2.UserId) .. "/profile",
-				icon_url = tbl.avatarUrl(),
-			},
-			footer = { text = tostring(game.JobId), icon_url = tbl.markUrl() },
-		}
-
-		if arg.thumb then
-			tbl2.thumbnail = { url = arg.thumb }
-		end
-
-		if tbl.BANNER ~= "" then
-			tbl2.image = { url = tbl.BANNER }
-		end
-
-		if arg.fields and #arg.fields > 0 then
-			tbl2.fields = arg.fields
-		end
-
-		local tbl3 = {
-			username = "Onyx",
-			avatar_url = tbl.markUrl(),
-			allowed_mentions = { parse = {} },
-			embeds = { tbl2 },
-		}
-
-		if arg.ping then
-			tbl3.content = "@everyone"
-			tbl3.allowed_mentions = { parse = { "everyone" } }
-		end
-
-		local ok, result = pcall(function()
-			return game:GetService("HttpService"):JSONEncode(tbl3)
-		end)
-
-		if not ok then
-			return false, "could not encode the payload"
-		end
-		local tbl4 = { body = result, done = false }
-
-		if #tbl.whQ >= 40 then
-			local v7 = table.remove(tbl.whQ, 1)
-			v7.done = true
-			v7.ok = false
-			v7.code = "dropped"
-			tbl.whDropped = tbl.whDropped + 1
-		end
-
-		tbl.whQ[#tbl.whQ + 1] = tbl4
-		tbl.whPump()
-		if not arg.wait then
-			return true, "queued"
-		end
-		local now = os.clock()
-
-		while not tbl4.done and os.clock() - now < 25 do
-			task.wait(0.1)
-		end
-
-		if not tbl4.done then
-			return false, "no answer from Discord"
-		end
-		return tbl4.ok, tbl4.code
 	end
 
 	task.spawn(function()
@@ -9715,56 +9411,6 @@ do
 	fn31()
 	flag12 = true
 	fn29()
-	tbl11.farm:Section({ Title = "Discord Webhook" })
-
-	tbl.el.whUrl = tbl11.farm:Input({
-		Title = "Webhook URL",
-		Flag = "Input_Discord_Webhook",
-		Desc = "Paste a Discord webhook and logging starts. Logs box opens, shell claims and round coins. Empty the box to stop.",
-		Placeholder = "https://discord.com/api/webhooks/...",
-		Callback = function(arg)
-			local whUrl = tostring(arg or "")
-
-			if whUrl ~= tostring(tbl.WH_URL or "") then
-				tbl.saidHello = false
-				tbl.whBreak = false
-				tbl.whLastErr = nil
-			end
-
-			tbl.WH_URL = whUrl
-		end,
-	})
-
-	tbl.el.whOn = tbl11.farm:Toggle({
-		Title = "Start Sender",
-		Flag = "Toggle_Discord_Sender",
-		Desc = "Starts posting to the webhook above. Logs box opens, shell claims and the coins each round paid out.",
-		Type = "Toggle",
-		Value = false,
-		Callback = function(whOn)
-			tbl.whOn = whOn
-			if not whOn then
-				return
-			end
-
-			task.spawn(function()
-				local v10, v11 = tbl.whHello()
-
-				v:Notify({
-					Title = v10 and "Sender Started" or "Sender Failed",
-					Content = v10 and "Posted the opening message to your webhook." or "Could not post: " .. tostring(v11) .. ".",
-					Duration = 6,
-					Icon = v10 and "check" or "x",
-				})
-
-				if not v10 then
-					tbl.whOn = false
-					tbl.setToggle(tbl.el.whOn, false)
-				end
-			end)
-		end,
-	})
-
 	tbl11.farm:Section({ Title = "Auto Open Boxes" })
 	tbl.el.box = {}
 
